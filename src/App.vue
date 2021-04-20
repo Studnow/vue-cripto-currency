@@ -1,6 +1,7 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-    <!-- <div
+    <div
+      v-if="!coins.length"
       class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
     >
       <svg
@@ -23,7 +24,7 @@
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         ></path>
       </svg>
-    </div> -->
+    </div>
     <div class="container">
       <section>
         <div class="flex">
@@ -44,24 +45,11 @@
             </div>
             <div class="flex bg-white p-1 rounded-md shadow-md flex-wrap">
               <span
+                v-for="coin in autocomplete"
+                :key="coin"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ coin }}
               </span>
             </div>
             <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
@@ -185,10 +173,32 @@ export default {
       tickers: [],
       selectedTicker: null,
       graph: [],
+      coins: [],
+      autocomplete: [],
     };
   },
 
   methods: {
+    getCoins() {
+      fetch(`
+        https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa
+        `)
+        .then((response) => response.json())
+        .then((c) => (this.coins = Object.keys(c.Data)))
+        .then((auto) => {
+          for (let i = 0; i < 4; i++) {
+            let r = this.getRandomIntInclusive(0, auto.length);
+            this.autocomplete.push(auto[r])
+          }
+        });
+    },
+
+    getRandomIntInclusive(min, max) {
+      min = Math.ceil(min);
+      max = Math.floor(max);
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    },
+
     add() {
       const newTicker = {
         name: this.ticker.toUpperCase(),
@@ -229,8 +239,16 @@ export default {
       );
     },
   },
+
+  created() {
+    },
+  mounted() {
+    this.getCoins();
+
+  },
 };
 </script>
 
 <style src="./main.css">
 </style>
+
