@@ -36,6 +36,7 @@
               <input
                 v-model="ticker"
                 @keydown.enter="add"
+                @change="this.err = false"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -43,16 +44,25 @@
                 placeholder="Например DOGE"
               />
             </div>
-            <div class="flex bg-white p-1 rounded-md shadow-md flex-wrap">
+            <div
+              v-if="findCoinsForAutocomplete.length"
+              class="flex bg-white p-1 rounded-md shadow-md flex-wrap"
+            >
               <span
-                v-for="coin in autocomplete"
+                @click="ticker = coin"
+                v-for="coin in findCoinsForAutocomplete"
                 :key="coin"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
                 {{ coin }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div
+              v-show="existTickerInTickers"
+              class="text-sm text-red-600"
+            >
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -179,46 +189,49 @@ export default {
   },
 
   methods: {
+    testTickers() {
+      this.tickers.map((item) => console.log(item.name));
+    },
     getCoins() {
       fetch(`
         https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa
         `)
         .then((response) => response.json())
-        .then((c) => (this.coins = Object.keys(c.Data)))
-        .then((auto) => {
-          for (let i = 0; i < 4; i++) {
-            let r = this.getRandomIntInclusive(0, auto.length);
-            this.autocomplete.push(auto[r])
-          }
-        });
-    },
-
-    getRandomIntInclusive(min, max) {
-      min = Math.ceil(min);
-      max = Math.floor(max);
-      return Math.floor(Math.random() * (max - min + 1)) + min;
+        .then((c) => (this.coins = Object.keys(c.Data)));
     },
 
     add() {
       const newTicker = {
-        name: this.ticker.toUpperCase(),
+        name: this.ticker.trim().toUpperCase(),
         price: "-",
       };
-      this.tickers.push(newTicker);
+      if (
+        newTicker.name !== "" &&
+        newTicker.name.length >= 2 &&
+        this.coins.includes(newTicker.name)
+      ) {
+        if (!this.existTickerInTickers) {
+          this.tickers.push(newTicker);
+        }
+      }
+      this.getPrice(newTicker);
+      this.ticker = "";
+    },
+
+    getPrice(addedTicker) {
       setInterval(async () => {
         const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${newTicker.name}&tsyms=USD&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa`
+          `https://min-api.cryptocompare.com/data/price?fsym=${addedTicker.name}&tsyms=USD&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa`
         );
         const data = await f.json();
 
-        this.tickers.find((t) => t.name === newTicker.name).price =
+        this.tickers.find((t) => t.name === addedTicker.name).price =
           data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
-        if (this.selectedTicker === newTicker.name) {
+        if (this.selectedTicker === addedTicker.name) {
           this.graph.push(data.USD);
         }
       }, 600000);
-      this.ticker = "";
     },
 
     removeTicker(currentTicker) {
@@ -240,11 +253,32 @@ export default {
     },
   },
 
-  created() {
+  computed: {
+    findTickerInCoins() {
+      return this.coins.filter((item) =>
+        item !== "" && item.includes(this.ticker.toUpperCase()) ? item : ""
+      );
     },
+    findCoinsForAutocomplete() {
+      let autocomplete = [];
+      for (let i = 0; i < 4; i++) {
+        if (this.findTickerInCoins[i] !== undefined)
+          autocomplete.push(this.findTickerInCoins[i]);
+      }
+      return autocomplete;
+    },
+
+    tickerChange() {
+      return this.ticker.length;
+    },
+    existTickerInTickers() {
+      return this.tickers.map((item) => item.name).includes(this.ticker);
+    },
+  },
+
+  created() {},
   mounted() {
     this.getCoins();
-
   },
 };
 </script>
