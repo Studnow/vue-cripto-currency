@@ -57,10 +57,7 @@
                 {{ coin }}
               </span>
             </div>
-            <div
-              v-show="existTickerInTickers"
-              class="text-sm text-red-600"
-            >
+            <div v-show="existTickerInTickers" class="text-sm text-red-600">
               Такой тикер уже добавлен
             </div>
           </div>
@@ -136,7 +133,7 @@
         </h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
-            v-for="(bar, idx) in normalizeGraph()"
+            v-for="(bar, idx) in normalizeGraph"
             :key="idx"
             :style="{ height: `${bar}%` }"
             class="bg-purple-800 border w-10"
@@ -188,10 +185,17 @@ export default {
     };
   },
 
+  created() {
+    const tickersData = localStorage.getItem("cryptonomicon-list");
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach(ticker => {
+        this.subscribeToUpdates(ticker)
+      })
+    }
+  },
+
   methods: {
-    testTickers() {
-      this.tickers.map((item) => console.log(item.name));
-    },
     getCoins() {
       fetch(`
         https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa
@@ -214,11 +218,13 @@ export default {
           this.tickers.push(newTicker);
         }
       }
-      this.getPrice(newTicker);
-      this.ticker = "";
+
+      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers))
+
+      this.subscribeToUpdates(newTicker);
     },
 
-    getPrice(addedTicker) {
+    subscribeToUpdates(addedTicker) {
       setInterval(async () => {
         const f = await fetch(
           `https://min-api.cryptocompare.com/data/price?fsym=${addedTicker.name}&tsyms=USD&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa`
@@ -231,7 +237,8 @@ export default {
         if (this.selectedTicker === addedTicker.name) {
           this.graph.push(data.USD);
         }
-      }, 600000);
+      }, 6000);
+      this.ticker = "";
     },
 
     removeTicker(currentTicker) {
@@ -242,14 +249,6 @@ export default {
     selectTicker(currentTicker) {
       this.selectedTicker = currentTicker.name;
       this.graph = [];
-    },
-
-    normalizeGraph() {
-      const maxValue = Math.max(...this.graph);
-      const minValue = Math.min(...this.graph);
-      return this.graph.map(
-        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
-      );
     },
   },
 
@@ -268,15 +267,19 @@ export default {
       return autocomplete;
     },
 
-    tickerChange() {
-      return this.ticker.length;
-    },
     existTickerInTickers() {
-      return this.tickers.map((item) => item.name).includes(this.ticker);
+      return this.tickers.map((item) => item.name).includes(this.ticker.toUpperCase());
+    },
+
+    normalizeGraph() {
+      const maxValue = Math.max(...this.graph);
+      const minValue = Math.min(...this.graph);
+      return this.graph.map(
+        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+      );
     },
   },
 
-  created() {},
   mounted() {
     this.getCoins();
   },
