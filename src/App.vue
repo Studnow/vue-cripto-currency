@@ -36,7 +36,6 @@
               <input
                 v-model="ticker"
                 @keydown.enter="add"
-                @change="this.err = false"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -45,12 +44,12 @@
               />
             </div>
             <div
-              v-if="findCoinsForAutocomplete.length"
+              v-if="coins.length"
               class="flex bg-white p-1 rounded-md shadow-md flex-wrap"
             >
               <span
                 @click="ticker = coin"
-                v-for="coin in findCoinsForAutocomplete"
+                v-for="coin in findTickerInCoins.slice(0, 4)"
                 :key="coin"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
@@ -84,10 +83,46 @@
         </button>
       </section>
       <template v-if="tickers.length">
+        <div class="flex">
+          <div class="flex">
+            <div class="max-w-xs">
+              <label
+                for="wallet"
+                class="block text-sm font-medium text-gray-700"
+                >Фильтр:</label
+              >
+
+              <input
+                v-model="filter"
+                type="search"
+                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
+                placeholder="Например DOGE"
+              />
+            </div>
+          </div>
+          <div class="flex">
+            <div class="max-w-xs">
+              <button
+                v-show="page > 1"
+                @click="page = page - 1"
+                class="m-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+              >
+                Назад</button
+              ><button
+                v-show="hasNextPage"
+                @click="page = page + 1"
+                :class="{ 'ml-32': page == 1 }"
+                class="m-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+              >
+                Вперёд
+              </button>
+            </div>
+          </div>
+        </div>
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="currentTicker in tickers"
+            v-for="currentTicker in paginatedTickers"
             :key="currentTicker.name"
             @click="selectTicker(currentTicker)"
             :class="{
@@ -133,7 +168,7 @@
         </h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
-            v-for="(bar, idx) in normalizeGraph"
+            v-for="(bar, idx) in normalizedGraph"
             :key="idx"
             :style="{ height: `${bar}%` }"
             class="bg-purple-800 border w-10"
@@ -177,26 +212,44 @@ export default {
   data() {
     return {
       ticker: "",
+      filter: "",
+
       tickers: [],
       selectedTicker: null,
+
       graph: [],
+
       coins: [],
-      autocomplete: [],
+
+      page: 1,
     };
   },
 
   created() {
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
+
+    if (windowData.filter) {
+      this.filter = windowData.filter;
+    }
+
+    if (windowData.page) {
+      this.page = +windowData.page;
+    }
+
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
-      this.tickers.forEach(ticker => {
-        this.subscribeToUpdates(ticker)
-      })
+      this.tickers.forEach((ticker) => {
+        this.subscribeToUpdates(ticker);
+      });
     }
   },
 
   methods: {
     getCoins() {
+      // solo work
       fetch(`
         https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa
         `)
@@ -209,6 +262,12 @@ export default {
         name: this.ticker.trim().toUpperCase(),
         price: "-",
       };
+
+      this.tickers = [...this.tickers, newTicker];
+
+      this.subscribeToUpdates(newTicker);
+      this.filter = "";
+      // solo work
       if (
         newTicker.name !== "" &&
         newTicker.name.length >= 2 &&
@@ -217,11 +276,7 @@ export default {
         if (!this.existTickerInTickers) {
           this.tickers.push(newTicker);
         }
-      }
-
-      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers))
-
-      this.subscribeToUpdates(newTicker);
+      } // end solo work
     },
 
     subscribeToUpdates(addedTicker) {
@@ -237,7 +292,7 @@ export default {
         if (this.selectedTicker === addedTicker.name) {
           this.graph.push(data.USD);
         }
-      }, 6000);
+      }, 600000);
       this.ticker = "";
     },
 
@@ -248,39 +303,91 @@ export default {
 
     selectTicker(currentTicker) {
       this.selectedTicker = currentTicker.name;
-      this.graph = [];
     },
   },
 
   computed: {
-    findTickerInCoins() {
-      return this.coins.filter((item) =>
-        item !== "" && item.includes(this.ticker.toUpperCase()) ? item : ""
+
+    pageStateOptions() {
+      return {
+        filter: this.filter,
+        page: this.page
+      }
+    },
+
+    startIndex() {
+      return (this.page - 1) * 6;
+    },
+    endIndex() {
+      return this.page * 6;
+    },
+    filteredTickers() {
+      return this.tickers.filter((ticker) =>
+        ticker.name.includes(this.filter.toUpperCase())
       );
     },
-    findCoinsForAutocomplete() {
-      let autocomplete = [];
-      for (let i = 0; i < 4; i++) {
-        if (this.findTickerInCoins[i] !== undefined)
-          autocomplete.push(this.findTickerInCoins[i]);
-      }
-      return autocomplete;
+
+    paginatedTickers() {
+      return this.filteredTickers.slice(this.startIndex, this.endIndex);
+    },
+
+    hasNextPage() {
+      return this.filteredTickers.length > this.endIndex;
+    },
+    // solo work
+    findTickerInCoins() {
+      return this.coins.filter((item) =>
+        item !== "" && item.includes(this.ticker.toUpperCase())
+          ? item.slice
+          : ""
+      );
     },
 
     existTickerInTickers() {
-      return this.tickers.map((item) => item.name).includes(this.ticker.toUpperCase());
-    },
+      return this.tickers
+        .map((item) => item.name)
+        .includes(this.ticker.toUpperCase());
+    }, // end solo work
 
-    normalizeGraph() {
+    normalizedGraph() {
       const maxValue = Math.max(...this.graph);
       const minValue = Math.min(...this.graph);
+      if (maxValue === minValue) {
+        return this.graph.map(() => 50);
+      }
       return this.graph.map(
         (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
     },
   },
 
+  watch: {
+    tickers() {
+      localStorage.setItem("cryptonomicon-list", JSON.stringify(this.tickers));
+    },
+    selectedTicker() {
+      this.graph = [];
+    },
+    paginatedTickers() {
+      if (this.paginatedTickers.length === 0 && this.page > 1) {
+        this.page -= 1;
+      }
+    },
+
+    filter() {
+      this.page = 1;
+    },
+    pageStateOptions(stateValue) {
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${stateValue.filter}&page=${stateValue.page}`
+      );
+    },
+  },
+
   mounted() {
+    // solo work
     this.getCoins();
   },
 };
