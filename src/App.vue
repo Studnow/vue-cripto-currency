@@ -122,8 +122,8 @@
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="currentTicker in paginatedTickers"
-            :key="currentTicker.name"
+            v-for="(currentTicker, idx) in paginatedTickers"
+            :key="currentTicker.name + ' ' + idx"
             @click="selectTicker(currentTicker)"
             :class="{
               'border-4 border-opacity-100':
@@ -136,7 +136,7 @@
                 {{ currentTicker.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ currentTicker.price }}
+                {{ formatPrice(currentTicker.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -206,7 +206,9 @@
   </div>
 </template>
 
+
 <script>
+import { subscribeToTicker, unsubscribeFromTicker } from "./api";
 export default {
   name: "App",
   data() {
@@ -239,15 +241,37 @@ export default {
     }
 
     const tickersData = localStorage.getItem("cryptonomicon-list");
+
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
       this.tickers.forEach((ticker) => {
-        this.subscribeToUpdates(ticker);
+        subscribeToTicker(ticker.name, (newPrice) => {
+          this.updateTicker(ticker.name, newPrice);
+        });
       });
     }
+
+    setInterval(this.updateTickers, 600000); // Vue биндит функции, если здесь убрать анонимную функцию то вне Vue теряется this
   },
 
   methods: {
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          if (t.name === this.selectedTicker) {
+            this.graph.push(price);
+          }
+          t.price = price;
+        });
+    },
+
+    formatPrice(price) {
+      if (price === "-") {
+        return "-";
+      }
+      return price > 1 ? price.toFixed(2) : price.toPrecision(3);
+    },
     getCoins() {
       // solo work
       fetch(`
@@ -262,43 +286,27 @@ export default {
         name: this.ticker.trim().toUpperCase(),
         price: "-",
       };
-
-      this.tickers = [...this.tickers, newTicker];
-
-      this.subscribeToUpdates(newTicker);
-      this.filter = "";
-      // solo work
-      if (
+      if ( // solo work
+        !this.existTickerInTickers &&
         newTicker.name !== "" &&
-        newTicker.name.length >= 2 &&
-        this.coins.includes(newTicker.name)
+        newTicker.name.length >= 2 //&&
+        // this.coins.includes(newTicker.name)
+        // end solo work
       ) {
-        if (!this.existTickerInTickers) {
-          this.tickers.push(newTicker);
-        }
-      } // end solo work
-    },
+        this.tickers = [...this.tickers, newTicker];
+      }
 
-    subscribeToUpdates(addedTicker) {
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${addedTicker.name}&tsyms=USD&api_key=03222eb8f05d125f80f76eb92982e6986c692e278f11f608805eb147cf5f57aa`
-        );
-        const data = await f.json();
-
-        this.tickers.find((t) => t.name === addedTicker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        if (this.selectedTicker === addedTicker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 600000);
+      this.filter = "";
       this.ticker = "";
+      subscribeToTicker(newTicker.name, (newPrice) => {
+        this.updateTicker(newTicker.name, newPrice);
+      });
     },
 
     removeTicker(currentTicker) {
       this.tickers = this.tickers.filter((t) => t !== currentTicker);
       this.selectedTicker = null;
+      unsubscribeFromTicker(currentTicker);
     },
 
     selectTicker(currentTicker) {
@@ -307,12 +315,11 @@ export default {
   },
 
   computed: {
-
     pageStateOptions() {
       return {
         filter: this.filter,
-        page: this.page
-      }
+        page: this.page,
+      };
     },
 
     startIndex() {
@@ -338,7 +345,7 @@ export default {
     findTickerInCoins() {
       return this.coins.filter((item) =>
         item !== "" && item.includes(this.ticker.toUpperCase())
-          ? item.slice
+          ? item
           : ""
       );
     },
