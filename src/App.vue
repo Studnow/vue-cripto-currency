@@ -286,7 +286,8 @@ export default {
         name: this.ticker.trim().toUpperCase(),
         price: "-",
       };
-      if ( // solo work
+      if (
+        // solo work
         !this.existTickerInTickers &&
         newTicker.name !== "" &&
         newTicker.name.length >= 2 //&&
@@ -344,9 +345,7 @@ export default {
     // solo work
     findTickerInCoins() {
       return this.coins.filter((item) =>
-        item !== "" && item.includes(this.ticker.toUpperCase())
-          ? item
-          : ""
+        item !== "" && item.includes(this.ticker.toUpperCase()) ? item : ""
       );
     },
 
